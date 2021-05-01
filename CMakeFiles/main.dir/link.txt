@@ -1,0 +1,1 @@
+/usr/bin/c++ -O1   -lGL -lGLEW -lstdc++ -lglfw -lGL -lm -lX11 -lpthread -lXi -lXrandr -ldl CMakeFiles/main.dir/src/main.cpp.o CMakeFiles/main.dir/src/mesh.cpp.o src/glad/glad.o -o main  /usr/lib/x86_64-linux-gnu/libGL.so /usr/lib/x86_64-linux-gnu/libGLU.so /usr/lib/x86_64-linux-gnu/libGLEW.so -ldl /usr/lib/x86_64-linux-gnu/libglfw.so.3.2 

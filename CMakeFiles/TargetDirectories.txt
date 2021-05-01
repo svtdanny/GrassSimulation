@@ -1,0 +1,3 @@
+/home/danil/Desktop/KG2021/Task3. Grass Simulation/CMakeFiles/rebuild_cache.dir
+/home/danil/Desktop/KG2021/Task3. Grass Simulation/CMakeFiles/edit_cache.dir
+/home/danil/Desktop/KG2021/Task3. Grass Simulation/CMakeFiles/main.dir
