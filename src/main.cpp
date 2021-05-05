@@ -5,6 +5,10 @@
 
 #include "mesh.h"
 
+#include <sys/time.h>
+
+#include <SOIL/SOIL.h>
+
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void processInput(GLFWwindow *window);
 void setMesh(GLuint VBO, GLuint VAO, GLuint EBO, Mesh mesh);
@@ -15,9 +19,10 @@ const unsigned int SCR_HEIGHT = 600;
 
 const char *vertexShaderSource = "#version 330 core\n"
                                  "layout (location = 0) in vec3 aPos;\n"
+                                 "uniform float time;\n"
                                  "void main()\n"
                                  "{\n"
-                                 "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+                                 "   gl_Position = vec4(aPos.x + sin(time) * (aPos.y + 0.5), aPos.y, aPos.z, 1.0);\n"
                                  "}\0";
 const char *fragmentShaderSource = "#version 330 core\n"
                                    "out vec4 FragColor;\n"
@@ -113,9 +118,17 @@ int main()
     glGenBuffers(1, &EBO);
     
     Mesh mesh;
-    mesh.Init(100, 100);
+    mesh.Init(20, 20);
     setMesh(VBO, VAO, EBO, mesh);
 
+    float time = 0.0f;
+    struct timeval tp;
+
+    gettimeofday(&tp, NULL);
+    time = tp.tv_sec + tp.tv_usec;
+    GLuint shaderTime = glGetUniformLocation(shaderProgram, "time");
+    glUniform1f(shaderTime, time);
+    
     // render loop
     // -----------
     while (!glfwWindowShouldClose(window))
@@ -123,6 +136,11 @@ int main()
         // input
         // -----
         processInput(window);
+
+        gettimeofday(&tp, NULL);
+        time = tp.tv_sec + tp.tv_usec;
+        //time = time * 0.2;
+        glUniform1f(shaderTime, time);
 
         // render
         // ------
@@ -222,4 +240,32 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
     // make sure the viewport matches the new window dimensions; note that width and
     // height will be significantly larger than specified on retina displays.
     glViewport(0, 0, width, height);
+}
+
+static GLuint createTexture(char* textureFile, GLuint textureUnit)
+{
+	GLuint textureID = 0;
+	
+	int width, height, numComponents;
+    unsigned char* image = SOIL_load_image("data/grass_blade.png", &width, &height, 0, SOIL_LOAD_RGB);
+
+
+
+	//Uint8_t* textureData = stbi_load(textureFile, &width, &height, &numComponents, 4);
+	//ASSERT(image);
+	
+	glGenTextures(1, &textureID);
+	glActiveTexture(textureUnit);
+	glBindTexture(GL_TEXTURE_2D, textureID);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
+
+    SOIL_free_image_data(image);
+
+	return textureID;
 }
