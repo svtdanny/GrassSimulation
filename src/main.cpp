@@ -4,35 +4,28 @@
 #include <iostream>
 
 #include "mesh.h"
+#include "camera.h"
+#include "shader_utils.h"
+#include "string.h"
 
 #include <sys/time.h>
-
-#include <SOIL/SOIL.h>
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void processInput(GLFWwindow *window);
 void setMesh(GLuint VBO, GLuint VAO, GLuint EBO, Mesh mesh);
+//void buildShaderProgram(const char * vertexShaderSource, const char * fragmentShaderSource, GLuint shaderProgram);
+GLuint createTexture(const char* textureFile);
+void renderMesh(Mesh mesh, long int time, GLuint VAO, Camera camera);
+void renderGround(Mesh mesh, GLuint VAO, Camera camera);
 
 // settings
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
-const char *vertexShaderSource = "#version 330 core\n"
-                                 "layout (location = 0) in vec3 aPos;\n"
-                                 "uniform float time;\n"
-                                 "void main()\n"
-                                 "{\n"
-                                 "   gl_Position = vec4(aPos.x + sin(time) * (aPos.y + 0.5), aPos.y, aPos.z, 1.0);\n"
-                                 "}\0";
-const char *fragmentShaderSource = "#version 330 core\n"
-                                   "out vec4 FragColor;\n"
-                                   "void main()\n"
-                                   "{\n"
-                                   "   FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
-                                   "}\n\0";
-
 int main()
-{
+{   
+ 
+    
     // glfw: initialize and configure
     // ------------------------------
     glfwInit();
@@ -59,76 +52,55 @@ int main()
         std::cout << "Failed to initialize GLAD" << std::endl;
         return -1;
     }
-
-    // build and compile our shader program
-    // ------------------------------------
-    // vertex shader
-    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-    glCompileShader(vertexShader);
-
-    // check for shader compile errors
-    int success;
-    char infoLog[512];
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-
-    if (!success)
-    {
-        glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-        std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n"
-                  << infoLog << std::endl;
-    }
-
-    // fragment shader
-    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-    glCompileShader(fragmentShader);
-
-    // check for shader compile errors
-    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-    if (!success)
-    {
-        glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-        std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n"
-                  << infoLog << std::endl;
-    }
-
-    // link shaders
-    GLuint shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-
-    // check for linking errors
-    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-    if (!success)
-    {
-        glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-        std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n"
-                  << infoLog << std::endl;
-    }
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
     
-    GLuint VBO, VAO, EBO;
+    // Camera init
 
-    // !!! You can`t generate this outside main
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-    glGenBuffers(1, &EBO);
-    
+    Camera camera;
+    camera.Init();
+
+    // Mesh init
     Mesh mesh;
-    mesh.Init(20, 20);
-    setMesh(VBO, VAO, EBO, mesh);
+    //mesh.orient = 1;
+    mesh.Init(10, 20, 0.2f, 1.0f);
+    
 
-    float time = 0.0f;
+    GLuint shaderProgram = glCreateProgram();
+    mesh.shaderProgram = shaderProgram;
+    mesh.linkShaders("shaders/grass.vert", "shaders/grass.frag");
+    mesh.setMesh(mesh.VBO, mesh.VAO, mesh.EBO);
+    mesh.loadTexture("data/grass_blade.png");
+    
+    std::cout << mesh.shaderProgram << std::endl;
+    std::cout << mesh.textureID << std::endl;
+
+    // Ground Init
+    
+    Mesh ground;
+    ground.orient = 1;
+    ground.Init(20,20, 2.0f, 2.0f);
+
+    GLuint shaderGroundProgram = glCreateProgram();
+    ground.shaderProgram = shaderGroundProgram;
+    ground.linkShaders("shaders/ground.vert", "shaders/ground.frag");
+    ground.setMesh(ground.VBO, ground.VAO, ground.EBO);
+    ground.loadTexture("data/ground.png");
+
+    std::cout << ground.shaderProgram << std::endl;
+    std::cout << ground.textureID << std::endl;
+
+    // time for shader
     struct timeval tp;
 
     gettimeofday(&tp, NULL);
-    time = tp.tv_sec + tp.tv_usec;
-    GLuint shaderTime = glGetUniformLocation(shaderProgram, "time");
-    glUniform1f(shaderTime, time);
+    long int startTime = tp.tv_sec * 1000 + tp.tv_usec / 1000;;
+    long int time = startTime;
+    mesh.shaderTime = glGetUniformLocation(mesh.shaderProgram, "time");
+    glUniform1f(mesh.shaderTime, time);
+
+    mesh.PVID  = glGetUniformLocation(mesh.shaderProgram, "PV");
+    ground.PVID  = glGetUniformLocation(ground.shaderProgram, "PV");
     
+
     // render loop
     // -----------
     while (!glfwWindowShouldClose(window))
@@ -138,91 +110,29 @@ int main()
         processInput(window);
 
         gettimeofday(&tp, NULL);
-        time = tp.tv_sec + tp.tv_usec;
-        //time = time * 0.2;
-        glUniform1f(shaderTime, time);
+        time = tp.tv_sec * 1000 + tp.tv_usec / 1000;;
+        time -= startTime;
 
-        // render
-        // ------
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        // draw our first triangle
-        glUseProgram(shaderProgram);
-        glBindVertexArray(VAO); // seeing as we only have a single VAO there's no need to bind it every time, but we'll do so to keep things a bit more organized
-        //glDrawArrays(GL_TRIANGLES, 0, 6);
-        
-        glDrawElements(GL_TRIANGLES, mesh.getNumTriangles() * 3, GL_UNSIGNED_INT, 0);
-        // glBindVertexArray(0); // no need to unbind it every time
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
-        // -------------------------------------------------------------------------------
+        renderGround(ground, ground.VAO, camera);
+        renderMesh(mesh, time, mesh.VAO, camera);
+
+       
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
-    // optional: de-allocate all resources once they've outlived their purpose:
-    // ------------------------------------------------------------------------
-    glDeleteVertexArrays(1, &VAO);
-    glDeleteBuffers(1, &VBO);
-    glDeleteBuffers(1, &EBO);
-    glDeleteProgram(shaderProgram);
+    mesh.freeResources();
 
     // glfw: terminate, clearing all previously allocated GLFW resources.
     // ------------------------------------------------------------------
     glfwTerminate();
     return 0;
-}
-
-void setMesh(GLuint VBO, GLuint VAO, GLuint EBO, Mesh mesh)
-{   
-    // set up vertex data (and buffer(s)) and configure vertex attributes
-    // ------------------------------------------------------------------
-    // float vertices[] = {
-    //     0.5f, 0.5f, 0.0f,   // top right
-    //     0.5f, -0.5f, 0.0f,  // bottom right
-    //     -0.5f, -0.5f, 0.0f, // bottom left
-    //     -0.5f, 0.5f, 0.0f,  // top left
-    //     -0.8f, 0.8f, 0.0f};
-
-    // unsigned int indices[] = {
-    //     // note that we start from 0!
-    //     0, 1, 3,
-    //     1, 2, 3,
-    //     1, 2, 4};
-
-    float * vertices = mesh.getVertices();
-    unsigned int * indices = mesh.getIndices();
-
-    int vertices_length = mesh.getVeriticesLen();
-    int indices_length = mesh.getIndicesLen();
-    std::cout << vertices_length << std::endl;
-    std::cout << indices_length << std::endl;
-    
-    // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
-    glBindVertexArray(VAO);
-
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, vertices_length, vertices, GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_length, indices, GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
-    glEnableVertexAttribArray(0);
-
-    // note that this is allowed, the call to glVertexAttribPointer registered VBO as the vertex attribute's bound vertex buffer object so afterwards we can safely unbind
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    // remember: do NOT unbind the EBO while a VAO is active as the bound element buffer object IS stored in the VAO; keep the EBO bound.
-    //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-
-    // You can unbind the VAO afterwards so other VAO calls won't accidentally modify this VAO, but this rarely happens. Modifying other
-    // VAOs requires a call to glBindVertexArray anyways so we generally don't unbind VAOs (nor VBOs) when it's not directly necessary.
-    glBindVertexArray(0);
-
-    // uncomment this call to draw in wireframe polygons.
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 }
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
@@ -242,30 +152,40 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
     glViewport(0, 0, width, height);
 }
 
-static GLuint createTexture(char* textureFile, GLuint textureUnit)
-{
-	GLuint textureID = 0;
-	
-	int width, height, numComponents;
-    unsigned char* image = SOIL_load_image("data/grass_blade.png", &width, &height, 0, SOIL_LOAD_RGB);
+void renderMesh(Mesh mesh, long int time, GLuint VAO, Camera camera){
+    glUseProgram(mesh.shaderProgram);
+    //std::cout << "time " << time << std::endl;
+    //time = time * 0.;
+    glUniform1f(mesh.shaderTime, time*1e-3f);
+    glUniformMatrix4fv(mesh.PVID, 1, GL_FALSE, &camera.PV[0][0]);
+    // render
+    // ------
+    
+    
+
+    // draw our first triangle
+    
+    glBindTexture(GL_TEXTURE_2D, mesh.textureID);
+    glBindVertexArray(VAO); // seeing as we only have a single VAO there's no need to bind it every time, but we'll do so to keep things a bit more organized
+    //glDrawArrays(GL_TRIANGLES, 0, 6);
 
 
 
-	//Uint8_t* textureData = stbi_load(textureFile, &width, &height, &numComponents, 4);
-	//ASSERT(image);
-	
-	glGenTextures(1, &textureID);
-	glActiveTexture(textureUnit);
-	glBindTexture(GL_TEXTURE_2D, textureID);
 
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
-
-    SOIL_free_image_data(image);
-
-	return textureID;
+    glDrawElements(GL_TRIANGLES, mesh.getNumTriangles() * 3, GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
 }
+
+void renderGround(Mesh mesh, GLuint VAO, Camera camera){
+    glUseProgram(mesh.shaderProgram);
+
+    glUniformMatrix4fv(mesh.PVID, 1, GL_FALSE, &camera.PV[0][0]);
+    
+    glBindTexture(GL_TEXTURE_2D, mesh.textureID);
+    glBindVertexArray(VAO); // seeing as we only have a single VAO there's no need to bind it every time, but we'll do so to keep things a bit more organized
+    //glDrawArrays(GL_TRIANGLES, 0, 6);
+    
+    glDrawElements(GL_TRIANGLES, mesh.getNumTriangles() * 3, GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
+}
+
